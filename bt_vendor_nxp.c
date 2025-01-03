@@ -80,7 +80,9 @@
 #define BD_ADDR_LEN 6
 #define BD_STR_ADDR_LEN 17
 
+#define MAX_PROP_LEN 256
 #define MCHAR_PORT_PROP "ro.boot.bluetooth.mchar_port"
+#define BAUDRATE_FW_INIT_PROP "ro.boot.bluetooth.baudrate_fw_init"
 /*================================== Typedefs ================================*/
 
 typedef int(conf_action_t)(char* p_conf_name, char* p_conf_value,
@@ -261,6 +263,18 @@ static int set_param_uint32(char* p_conf_name, char* p_conf_value,
   *((uint32_t*)p_conf_var) = str_to_uint32_t(p_conf_value);
   return 0;
 }
+
+static int set_baudrate_fw_init(char* p_conf_name, char* p_conf_value,
+                            void* p_conf_var, int param) {
+  UNUSED(p_conf_name);
+  UNUSED(param);
+  char con_val[MAX_PROP_LEN] = "\0";
+  property_get(BAUDRATE_FW_INIT_PROP, con_val, p_conf_value);
+  VND_LOGI("Baudrate_fw_init is set to: %s", con_val);
+  *((uint32_t*)p_conf_var) = str_to_uint32_t(con_val);
+  return 0;
+}
+
 
 static int set_ble_1m_power(char* p_conf_name, char* p_conf_value,
                             void* p_conf_var, int param) {
@@ -470,7 +484,7 @@ static const conf_entry_t conf_table[] = {
     {"mchar_port", set_mchar_port, &mchar_port, 0},
     {"mbt_port", set_param_string, &mbt_port, 0},
     {"baudrate_bt", set_param_uint32, &baudrate_bt, 0},
-    {"baudrate_fw_init", set_param_uint32, &baudrate_fw_init, 0},
+    {"baudrate_fw_init", set_baudrate_fw_init, &baudrate_fw_init, 0},
     {"bd_address", set_bd_address_buf, &write_bd_address, 0},
     {"pFilename_fw_init_config_bin", set_param_string,
      &pFilename_fw_init_config_bin, 0},
