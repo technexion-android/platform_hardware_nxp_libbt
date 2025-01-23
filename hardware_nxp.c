@@ -40,9 +40,7 @@
 #include "fw_loader_io.h"
 
 /*================================== Macros ==================================*/
-/*****************************************************************************
- * ** copy from bt_hci_bdroid.h
- * ******************************************************************************/
+/* Following definitions copied from deprecated bt_hci_bdroid.h */
 #define MSG_STACK_TO_HC_HCI_CMD 0x2000 /* eq. BT_EVT_TO_LM_HCI_CMD */
 #define BT_HC_HDR_SIZE (sizeof(HC_BT_HDR))
 

@@ -80,7 +80,6 @@
 #define BD_ADDR_LEN 6
 #define BD_STR_ADDR_LEN 17
 
-#define MAX_PROP_LEN 256
 #define MCHAR_PORT_PROP "ro.boot.bluetooth.mchar_port"
 #define BAUDRATE_FW_INIT_PROP "ro.boot.bluetooth.baudrate_fw_init"
 /*================================== Typedefs ================================*/
@@ -268,13 +267,12 @@ static int set_baudrate_fw_init(char* p_conf_name, char* p_conf_value,
                             void* p_conf_var, int param) {
   UNUSED(p_conf_name);
   UNUSED(param);
-  char con_val[MAX_PROP_LEN] = "\0";
-  property_get(BAUDRATE_FW_INIT_PROP, con_val, p_conf_value);
-  VND_LOGI("Baudrate_fw_init is set to: %s", con_val);
-  *((uint32_t*)p_conf_var) = str_to_uint32_t(con_val);
+  char conf_value[PROP_VALUE_MAX] = {0};
+  property_get(BAUDRATE_FW_INIT_PROP, conf_value, p_conf_value);
+  VND_LOGI("baudrate_fw_init is set to %s", conf_value);
+  *((uint32_t*)p_conf_var) = str_to_uint32_t(conf_value);
   return 0;
 }
-
 
 static int set_ble_1m_power(char* p_conf_name, char* p_conf_value,
                             void* p_conf_var, int param) {
@@ -321,9 +319,10 @@ static int set_param_string(char* p_conf_name, char* p_conf_value,
 
 static int set_mchar_port(char* p_conf_name, char* p_conf_value,
                           void* p_conf_var, int param) {
-  set_param_string(p_conf_name, p_conf_value, p_conf_var, param);
-  property_get(MCHAR_PORT_PROP, mchar_port, p_conf_value);
-  VND_LOGI("the mchar_port is %s", mchar_port);
+  UNUSED(p_conf_name);
+  UNUSED(param);
+  property_get(MCHAR_PORT_PROP, p_conf_var, p_conf_value);
+  VND_LOGI("mchar_port set to %s", mchar_port);
   is_uart_port = 1;
   return 0;
 }

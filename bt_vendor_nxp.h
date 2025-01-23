@@ -37,13 +37,13 @@
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include "bt_vendor_lib.h"
-#include <stdbool.h>
 
 /*================================== Macros ==================================*/
 
-#define BT_HAL_VERSION "009.029"
+#define BT_HAL_VERSION "009.030"
 
 #define TIMEOUT_SEC 6
 #define RW_SUCCESSFUL (1)

@@ -25,14 +25,10 @@ BOARD_UART_FW_LOADER_VERSION = v3
 
 # libbt-vendor.so
 include $(CLEAR_VARS)
-ifeq ($(shell expr $(PLATFORM_VERSION) "==" Tiramisu),1)
-BDROID_DIR := $(TOP_DIR)packages/modules/Bluetooth/system
-else
 ifeq ($(shell expr $(PLATFORM_SDK_VERSION) "<=" 32),1)
 BDROID_DIR := $(TOP_DIR)system/bt
 else
 BDROID_DIR := $(TOP_DIR)packages/modules/Bluetooth/system
-endif
 endif
 
 LOCAL_C_INCLUDES += \
@@ -43,7 +39,6 @@ LOCAL_SRC_FILES := \
     bt_vendor_nxp.c \
     fw_loader_io.c \
     hardware_nxp.c
-
 # VHAL_LOG_LEVEL decides maximum log level supported at compile time between 0-5.
 LOCAL_CFLAGS += -DVHAL_LOG_LEVEL=5
 LOCAL_CFLAGS += -Wsign-compare

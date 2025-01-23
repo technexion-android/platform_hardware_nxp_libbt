@@ -1,0 +1,16 @@
+#### Firmware Initialization Configuration Binary ####
+
+This binaries are used to configure Firmware during its initialization process.
+This file maps binaries with features configured during Firmware initialization.
+
+
+Filename				| Configured Features
+----------------------- | -----------------------------------------------------
+88W8987A0_FwConf_0.bin	| OOB IR enabled, LE 2M Disabled
+
+
+Feature Note:
+-------------
+Make sure feature related flags are configured appropriately. Refer main readme for more info.
+    
+    OOB IR enabled : Make sure independent_reset_mode is set to 0 and send_oob_ir_trigger is configured based on platform.
