@@ -1,0 +1,73 @@
+//
+// Copyright 2012 The Android Open Source Project
+// Portions copyright 2012-2013, 2015, 2018-2025 NXP
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+cc_defaults {
+    name: "firmware_loader_v3",
+    srcs: ["fw_loader_uart.c"],
+    cflags: ["-DUART_DOWNLOAD_FW"],
+}
+
+cc_defaults {
+    name: "firmware_loader_v2",
+    srcs: ["fw_loader_uart_v2.c"],
+
+    cflags: [
+        "-DUART_DOWNLOAD_FW",
+        "-DFW_LOADER_V2",
+    ],
+}
+
+cc_library_shared {
+    name: "libbt-vendor",
+    include_dirs: [
+        "hardware/interfaces/bluetooth/1.0/default",
+    ],
+    local_include_dirs: ["conf/nxp/"],
+    srcs: [
+        "bt_vendor_nxp.c",
+        "fw_loader_io.c",
+        "hardware_nxp.c",
+    ],
+    //firmware loader v2 version is only applicable for 8887-FP101 and other SoC's support v3
+    defaults: ["firmware_loader_v3"],
+
+    cflags: [
+        "-DVHAL_LOG_LEVEL=5",
+    ],
+    shared_libs: [
+        "libcutils",
+        "liblog",
+        "libbase",
+    ],
+    proprietary: true,
+    owner: "nxp",
+}
+
+bootstrap_go_package {
+    name: "soong-libbt_vendor",
+    pkgPath: "android/soong/hardware/nxp/libbt",
+    deps: [
+        "blueprint",
+        "blueprint-pathtools",
+        "soong",
+        "soong-android",
+        "soong-cc",
+        "soong-genrule",
+    ],
+    srcs: ["libbt_vendor.go"],
+    pluginFor: ["soong_build"],
+}
