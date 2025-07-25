@@ -44,7 +44,7 @@ func libbtvendorDefaults(ctx android.LoadHookContext) {
 	}
 
 	p := &props{}
-	
+
 	version := ctx.AConfig().PlatformSdkVersion().FinalOrFutureInt()
 	Cflags = append(Cflags, "-DPLATFORM_SDK_VERSION="+strconv.Itoa(version))
 	if version <= 32 {

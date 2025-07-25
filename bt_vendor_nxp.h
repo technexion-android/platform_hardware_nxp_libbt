@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright 2018-2023 NXP
+ *  Copyright 2018-2025 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@
 
 /*================================== Macros ==================================*/
 
-#define BT_HAL_VERSION "009.030"
+#define BT_HAL_VERSION "009.032"
 
 #define TIMEOUT_SEC 6
 #define RW_SUCCESSFUL (1)
@@ -65,6 +65,7 @@
 
 #define BLE_SET_1M_POWER 0x01
 #define BLE_SET_2M_POWER 0x02
+#define BLE_SET_CODED_PHY_POWER 0x04
 #define BT_SET_SLEEP_MODE 0x02
 #define BT_SET_FULL_POWER_MODE 0x03
 
@@ -190,8 +191,9 @@ extern const bt_vendor_callbacks_t* vnd_cb;
 extern char pFilename_cal_data[];
 extern int8_t ble_1m_power;
 extern int8_t ble_2m_power;
+extern int8_t ble_coded_phy_power;
 extern uint8_t bt_max_power;
-extern uint8_t set_1m_2m_power;
+extern uint8_t ble_phy_power_flags;
 extern uint8_t bt_set_max_power;
 extern uint8_t independent_reset_mode;
 extern uint8_t independent_reset_gpio_pin;

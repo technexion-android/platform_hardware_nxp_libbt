@@ -1,7 +1,7 @@
 /******************************************************************************
  *  Copyright 2012 The Android Open Source Project
  *  Portions copyright (C) 2009-2012 Broadcom Corporation
- *  Portions copyright 2012-2013, 2015, 2018-2023 NXP
+ *  Portions copyright 2012-2013, 2015, 2018-2025 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@
 #endif
 #include <limits.h>
 #include <linux/gpio.h>
+#include <poll.h>
 
 #include "bt_vendor_log.h"
 #include "bt_vendor_nxp.h"
@@ -68,8 +69,6 @@
  */
 #define POLL_DRIVER_DURATION_US (100000U)
 #define POLL_DRIVER_MAX_TIME_MS (20000U)
-#define POLL_CONFIG_UART_MS (10U)
-#define POLL_RETRY_TIMEOUT_MS (1U)
 #define POLL_MAX_TIMEOUT_MS (1000U)
 
 #define CONF_COMMENT '#'
@@ -114,7 +113,8 @@ static uint32_t baudrate_bt = 3000000;
 int write_bdaddrss = 0;
 int8_t ble_1m_power = 0;
 int8_t ble_2m_power = 0;
-uint8_t set_1m_2m_power = 0;
+int8_t ble_coded_phy_power = 0;
+uint8_t ble_phy_power_flags = 0;
 uint8_t bt_max_power = 0;
 uint8_t bt_set_max_power = 0;
 uint8_t independent_reset_gpio_pin = 0xFF;
@@ -274,19 +274,10 @@ static int set_baudrate_fw_init(char* p_conf_name, char* p_conf_value,
   return 0;
 }
 
-static int set_ble_1m_power(char* p_conf_name, char* p_conf_value,
-                            void* p_conf_var, int param) {
-  set_param_int8(p_conf_name, p_conf_value, p_conf_var, param);
-  set_1m_2m_power |= BLE_SET_1M_POWER;
-  return 0;
-}
-
-static int set_ble_2m_power(char* p_conf_name, char* p_conf_value,
-                            void* p_conf_var, int param) {
-  UNUSED(p_conf_name);
-  UNUSED(param);
-  set_param_int8(p_conf_name, p_conf_value, p_conf_var, param);
-  set_1m_2m_power |= BLE_SET_2M_POWER;
+static int set_ble_phy_power(char* p_conf_name, char* p_conf_value,
+                            void* p_conf_var, int flag) {
+  set_param_int8(p_conf_name, p_conf_value, p_conf_var, flag);
+  ble_phy_power_flags |= flag;
   return 0;
 }
 
@@ -422,9 +413,12 @@ static int load_ble_tx_power_conf(char* p_conf_name, char* p_conf_value,
       key = strtok(key, " \t");
       value = strtok(value, " \t");
       if (strcmp(key, "ble_1m_power") == 0) {
-        set_ble_1m_power(key, value, &ble_1m_power, 0);
+        set_ble_phy_power(key, value, &ble_1m_power, BLE_SET_1M_POWER);
       } else if (strcmp(key, "ble_2m_power") == 0) {
-        set_ble_2m_power(key, value, &ble_2m_power, 0);
+        set_ble_phy_power(key, value, &ble_2m_power, BLE_SET_2M_POWER);
+      } else if (strcmp(key, "ble_coded_phy_power") == 0) {
+	set_ble_phy_power(key, value, &ble_coded_phy_power,
+                          BLE_SET_CODED_PHY_POWER);
       } else if (strcmp(key, "bt_max_power") == 0) {
         set_bt_tx_power(key, value, &bt_max_power, 0);
       } else {
@@ -602,6 +596,58 @@ static void vnd_load_conf(const char* p_path) {
 }
 
 /******************************************************************************
+**
+** Function:        safe_read_timeout
+**
+** Description:     Reads a specified number of bytes from a file descriptor
+**                  with timeout handling using poll().This function repeatedly
+**                  polls the file descriptor until either the requested number
+**                  of bytes is read or overal timeout define by max_timestamp
+**                  is reached.It handles retryable errors (like EINTR, EAGAIN,
+**                  or EWOULDBLOCK) gracefully and continues reading as long as
+**                  time permits. The poll timeout is dynamically adjusted
+**                  based on the remaining time.
+**
+** Return Value:    On success: Number of bytes read (equal to requested count)
+**                  On failure: -1 (due to timeout or unrecoverable error)
+**
+*****************************************************************************/
+ssize_t safe_read_timeout(int fd, unsigned char* buf, size_t count,
+                          uint64_t max_timestamp) {
+  struct pollfd pfd = {.fd = fd, .events = POLLIN};
+  size_t total_read = 0;
+
+  while (total_read < count && fw_upload_GetTime() < max_timestamp) {
+    int remaining_timeout = max_timestamp - fw_upload_GetTime();
+    int poll_ret = poll(&pfd, 1, remaining_timeout);
+
+    if (poll_ret < 0) {
+      if (errno == EINTR) continue;
+      VND_LOGE("Poll error: %s (errno=%d)", strerror(errno), errno);
+      return -1;
+    } else if (poll_ret == 0) {
+      VND_LOGV("Poll timed out (no data). Retrying... Time left: %d ms",
+               (int)(max_timestamp - fw_upload_GetTime()));
+      continue;
+    }
+
+    ssize_t bytes_read = read(fd, buf + total_read, count - total_read);
+    if (bytes_read < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+        VND_LOGV("Retryable read error: %s (errno=%d)", strerror(errno), errno);
+        continue;
+      }
+      VND_LOGE("Read failed: %s (errno=%d)", strerror(errno), errno);
+      return -1;
+    }
+
+    total_read += bytes_read;
+  }
+
+  return ((total_read == count) ? total_read : -1);
+}
+
+/******************************************************************************
  **
  ** Function:        read_hci_event
  **
@@ -611,56 +657,40 @@ static void vnd_load_conf(const char* p_path) {
  **
  *
  *****************************************************************************/
-
-static int read_hci_event(hci_event* evt_pkt, uint64_t retry_delay_ms,
-                          uint32_t max_duration_ms) {
+static int read_hci_event(hci_event* evt_pkt, uint64_t max_timestamp) {
   ssize_t r;
-  uint8_t count, remain;
-  uint32_t total_duration = 0;
+  uint8_t remain;
 
-  /* The first byte identifies the packet type. For HCI event packets, it
-   * should be 0x04, so we read until we get to the 0x04. */
-  VND_LOGV("start read hci event 0x4");
-  count = 0;
-  while (fw_upload_GetBufferSize(mchar_fd) <
-         HCI_EVENT_HEADER_SIZE + HCI_PACKET_TYPE_SIZE) {
-    usleep((useconds_t)(retry_delay_ms * 1000));
-    total_duration += (uint32_t)retry_delay_ms;
-    if (total_duration >= max_duration_ms) {
-      VND_LOGE("Read hci complete event failed timed out. Total_duration = %u",
-               total_duration);
-      return -1;
-    }
-  };
-  r = read(mchar_fd, evt_pkt->raw_data,
-           HCI_EVENT_HEADER_SIZE + HCI_PACKET_TYPE_SIZE);
+  /* Reads 3-byte HCI Event Header: packet type, event code, and parameter
+  * length */
+  r = safe_read_timeout(mchar_fd, evt_pkt->raw_data,
+                        HCI_EVENT_HEADER_SIZE + HCI_PACKET_TYPE_SIZE,
+                        max_timestamp);
   if (r <= 0) {
-    VND_LOGV("read hci event 0x04 failed");
-    VND_LOGV("Error %s (%d)", strerror(errno), errno);
+    VND_LOGE("Failed to read HCI event header (errno=%d)", errno);
+    return -1;
   }
   if (evt_pkt->info.packet_type != HCI_PACKET_EVENT) {
     VND_LOGE("Invalid packet type(%02X) received", evt_pkt->info.packet_type);
     return -1;
   }
-  /* Now we read the parameters. */
-  VND_LOGV("start read hci event para");
+
   if (evt_pkt->info.para_len < HCI_EVENT_PAYLOAD_SIZE) {
     remain = evt_pkt->info.para_len;
   } else {
     remain = HCI_EVENT_PAYLOAD_SIZE;
     VND_LOGE("Payload size(%d) greater than capacity", evt_pkt->info.para_len);
   }
-  while (fw_upload_GetBufferSize(mchar_fd) < (uint32_t)remain)
-    ;
-  while ((count) < remain) {
-    r = read(mchar_fd, evt_pkt->info.payload + count, remain - (count));
+
+  if (remain > 0) {
+    r = safe_read_timeout(mchar_fd, evt_pkt->info.payload, remain,
+                          max_timestamp);
     if (r <= 0) {
-      VND_LOGE("read hci event para failed");
-      VND_LOGE("Error: %s (%d)", strerror(errno), errno);
+      VND_LOGE("Failed to read HCI event payload (errno=%d)", errno);
       return -1;
     }
-    count += r;
   }
+
   return 0;
 }
 
@@ -734,34 +764,35 @@ static int8_t check_hci_event_status(hci_event* evt_pkt, uint16_t opcode) {
  **
  *
  *****************************************************************************/
-static int8_t read_hci_event_status(uint16_t opcode, uint64_t retry_delay_ms,
-                                    uint64_t max_duration_ms) {
-  int8_t ret = -1;
+static int8_t read_hci_event_status(uint16_t opcode, uint64_t max_timeout_ms) {
   hci_event evt_pkt;
+  int8_t ret = -1;
   memset(&evt_pkt, 0x00, sizeof(evt_pkt));
-  uint64_t start_ms = fw_upload_GetTime();
-  uint64_t cost_ms = 0;
-  uint64_t remaining_time_ms = max_duration_ms;
-  int read_hci_flag;
+
+  uint64_t max_timestamp = fw_upload_GetTime() + max_timeout_ms;
+
   VND_LOGD("Reading %s event", hw_bt_cmd_to_str(opcode));
-  read_hci_flag =
-      read_hci_event(&evt_pkt, retry_delay_ms, (uint32_t)remaining_time_ms);
-  while ((cost_ms < max_duration_ms) && (read_hci_flag == 0)) {
+  while (fw_upload_GetTime() < max_timestamp) {
+    if (read_hci_event(&evt_pkt, max_timestamp) < 0) {
+      VND_LOGE("Failed to read event for opcode 0x%04X", opcode);
+      return -1;
+    }
+
     ret = check_hci_event_status(&evt_pkt, opcode);
     if (ret == 0) {
-      break;
+      return 0;
     }
-    remaining_time_ms = max_duration_ms - (fw_upload_GetTime() - start_ms);
-    read_hci_flag =
-        read_hci_event(&evt_pkt, retry_delay_ms, (uint32_t)remaining_time_ms);
-    cost_ms = fw_upload_GetTime() - start_ms;
+    //continue reading if controller sends debug event
   }
-  if (cost_ms >= max_duration_ms) {
-    VND_LOGE("Read hci complete event failed, timed out at: %u",
-             (uint32_t)cost_ms);
+
+  if (fw_upload_GetTime() >= max_timestamp) {
+    VND_LOGE("Read HCI Complete event failed, timed out for opcode 0x%04X",
+             opcode);
   }
+
   return ret;
 }
+
 
 /*******************************************************************************
 **
@@ -776,7 +807,7 @@ static int8_t send_hci_reset(void) {
   int8_t ret = -1;
   if (hw_bt_send_hci_cmd_raw(HCI_CMD_NXP_RESET) != 0) {
     VND_LOGE("Failed to write reset command");
-  } else if ((read_hci_event_status(HCI_CMD_NXP_RESET, POLL_CONFIG_UART_MS,
+  } else if ((read_hci_event_status(HCI_CMD_NXP_RESET,
                                     POLL_MAX_TIMEOUT_MS) != 0)) {
     VND_LOGE("Failed to read HCI RESET CMD response!");
   } else {
@@ -866,6 +897,9 @@ static uint32 uart_speed(uint32 s) {
     case 3000000U:
       ret = B3000000;
       break;
+    case 4000000U:
+      ret = B4000000;
+      break;
     default:
       ret = B0;
       break;
@@ -926,6 +960,9 @@ static uint32 uart_speed_translate(uint32 s) {
       break;
     case B3000000:
       ret = 3000000U;
+      break;
+    case B4000000:
+      ret = 4000000U;
       break;
     default:
       ret = 0;
@@ -1191,11 +1228,10 @@ static int config_uart() {
       VND_LOGE("Can't set baud rate");
       return -1;
     }
-    if (send_hci_reset() != 0) {
-      return -1;
-    }
+
     /* Set bt chip Baud rate CMD */
-    if ((baudrate_bt == 3000000) || (baudrate_bt == 115200)) {
+    if ((baudrate_bt == 3000000) || (baudrate_bt == 115200) ||
+        (baudrate_bt == 4000000)) {
       VND_LOGD("set fw baudrate as %d", baudrate_bt);
       if (hw_send_change_baudrate_raw(baudrate_bt)) {
         VND_LOGE("Failed to write set baud rate command");
@@ -1203,7 +1239,6 @@ static int config_uart() {
       }
       VND_LOGV("start read hci event");
       if (read_hci_event_status(HCI_CMD_NXP_CHANGE_BAUDRATE,
-                                POLL_CONFIG_UART_MS,
                                 POLL_MAX_TIMEOUT_MS) != 0) {
         VND_LOGE("Failed to read set baud rate command response! ");
         return -1;
@@ -1423,8 +1458,8 @@ static int bt_vnd_send_inband_ir(uint32_t baudrate) {
       return -1;
     } else {
       VND_LOGV("start read hci event");
-      if (read_hci_event_status(HCI_CMD_INBAND_RESET, POLL_RETRY_TIMEOUT_MS,
-                                POLL_MAX_TIMEOUT_MS) != 0) {
+      if (read_hci_event_status(HCI_CMD_INBAND_RESET, POLL_MAX_TIMEOUT_MS) !=
+          0) {
         VND_LOGE("Failed to read Inband reset response");
         return -1;
       }
@@ -1464,8 +1499,7 @@ static void send_exit_heartbeat_mode(void) {
     VND_LOGD("Failed to write exit heartbeat command \n");
     return;
   }
-  if (read_hci_event(&evt_pkt, POLL_RETRY_TIMEOUT_MS, POLL_CONFIG_UART_MS) ==
-      0) {
+  if (read_hci_event(&evt_pkt, POLL_MAX_TIMEOUT_MS) == 0) {
     if (check_hci_event_status(&evt_pkt, HCI_CMD_NXP_BLE_WAKEUP) == 0) {
       if ((evt_pkt.info.para_len > HCI_EVT_PYLD_SUBCODE_IDX) &&
           (evt_pkt.info.payload[HCI_EVT_PYLD_SUBCODE_IDX] ==
@@ -1610,15 +1644,6 @@ static int bt_vnd_op(bt_vendor_opcode_t opcode, void* param) {
           VND_LOGD("enable_pdn_recovery %d", enable_pdn_recovery);
           VND_LOGD("enable_lpm %d", enable_lpm);
           VND_LOGD("use_controller_addr %d", use_controller_addr);
-          if (set_1m_2m_power & BLE_SET_1M_POWER) {
-            VND_LOGD("BLE 1M Power set to %ddBm", ble_1m_power);
-          }
-          if (set_1m_2m_power & BLE_SET_2M_POWER) {
-            VND_LOGD("BLE 2M Power set to %ddBm", ble_2m_power);
-          }
-          if (bt_set_max_power) {
-            VND_LOGD("BT Max Power set to %ddBm", bt_max_power);
-          }
         }
 #endif
       }

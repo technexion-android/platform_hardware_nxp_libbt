@@ -52,6 +52,7 @@ optional keys are listed below:
 		ble_1m_power = 6
 		ble_2m_power = 5
 		bt_max_power = 6
+		ble_coded_phy_power = 10
 
 		2.Set the path of above created file persist system property
 		Example: Say above created file is at /vendor/firmware/nxp/btpower_XX.conf
@@ -63,6 +64,7 @@ optional keys are listed below:
 		Following are supported values for BT/BLE Power Configuration file:
 		ble_1m_power: Set signed Bluetooth LE Transmit Power level for 1M PHY, example: ble_1m_power = 10
 		ble_2m_power: Set signed Bluetooth LE Transmit Power level for 2M PHY, example: ble_1m_power = -5
+		ble_coded_phy_power: Set signed Bluetooth LE Transmit Power level for CODED PHY, example: ble_coded_phy_power = 10
 					Valid Supported Values:
 							Power Class		Minimum Tx Power 	Maximum Tx Power
 								1.5				 -20dbm				 10dbm

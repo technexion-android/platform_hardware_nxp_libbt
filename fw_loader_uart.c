@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright 2009-2023 NXP
+ *  Copyright 2009-2024 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -128,7 +128,9 @@ static uint8 fw_init_config_bin[FW_INIT_CONFIG_LEN];
 #endif
 
 static const UART_BAUDRATE UartCfgTbl[] = {
-    {115200, 16, 0x0075F6FD}, {3000000, 1, 0x00C00000},
+    {115200, 16, 0x0075F6FD},
+    {3000000, 1, 0x00C00000},
+    {4000000, 1, 0x01000000},
 };
 #if defined(__CWCC__) || defined(_WIN32) || defined(_WIN64)
 #pragma pack(push, 1)

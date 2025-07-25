@@ -1,5 +1,27 @@
 # Change Log
 All notable changes in Bluetooth Vendor Hardware Abstraction Layer(BT VHAL) will be documented in this file.
+## [009.032] - 2025-June-21
+
+### Added
+- Added support of 4M baudrate for firmware download process and HCI
+  communications.
+
+## [009.031] - 2025-May-21
+
+### Added
+- Optimized VHAL performance by replacing inefficient busy-wait loops in HCI
+  event handling with a poll()-based mechanism and eliminating redundant HCI
+  reset at 115200 baud, reducing initialization time and improving responsiveness.
+- Added support of BLE Coded PHY TX Power Configuration using power config file
+  via pFilename_tx_power.
+
+## [009.029] - 2024-October-10
+
+### Added
+- Improved Inband IR recovery by resetting the IR configuration property on
+  failure and introducing a PDn trigger mechanism to ensure reliable bluetooth
+  recovery.
+
 ## [009.028] - 2024-October-01
 
 ### Added
@@ -11,7 +33,7 @@ All notable changes in Bluetooth Vendor Hardware Abstraction Layer(BT VHAL) will
 ### Added
 - Added support to configure BT/BLE Power configurations using power
   configuration file via pFilename_tx_power.
-- Deprecated ble_1m_powe, ble_2m_power, bt_max_power_sel configurations
+- Deprecated ble_1m_power, ble_2m_power, bt_max_power_sel configurations
   from bt_vendor.conf
 
 ## [009.024] - 2024-January-04

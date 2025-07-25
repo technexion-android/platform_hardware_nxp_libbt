@@ -1,6 +1,5 @@
 //
-// Copyright 2012 The Android Open Source Project
-// Portions copyright 2012-2013, 2015, 2018-2025 NXP
+// Copyright 2025 NXP
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,13 +35,15 @@ cc_library_shared {
     include_dirs: [
         "hardware/interfaces/bluetooth/1.0/default",
     ],
-    local_include_dirs: ["conf/nxp/"],
     srcs: [
         "bt_vendor_nxp.c",
         "fw_loader_io.c",
         "hardware_nxp.c",
     ],
-    //firmware loader v2 version is only applicable for 8887-FP101 and other SoC's support v3
+    //Firmware loader version selection:
+    // Default to 'firmware_loader_v3' for all current and future SoCs.
+    // TODO: as 'firmware_loader_v2' is only used for legacy SoC 8887-FP101, support shall be removed in future
+
     defaults: ["firmware_loader_v3"],
 
     cflags: [

@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright 2012-2013, 2020-2023 NXP
+ *  Copyright 2012-2013, 2020-2025 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -567,7 +567,7 @@ static void hw_config_process_packet(void* packet) {
           case HCI_CMD_NXP_CUSTOM_OPCODE:
             if ((stream[opcode_offset + 3] ==
                  HCI_CMD_NXP_SUB_ID_BLE_TX_POWER) &&
-                set_1m_2m_power) {
+                ble_phy_power_flags) {
               hw_config.skip_seq_incr = 1;
             }
             break;
@@ -942,15 +942,19 @@ int8 hw_send_change_baudrate_raw(uint32_t baudrate) {
  *****************************************************************************/
 static int8 hw_ble_set_power_level(void) {
   int8 ret = -1;
-  if (set_1m_2m_power & BLE_SET_1M_POWER) {
+  if (ble_phy_power_flags & BLE_SET_1M_POWER) {
     VND_LOGD("Setting BLE 1M TX power level at %d dbm", ble_1m_power);
-    set_1m_2m_power &= ~BLE_SET_1M_POWER;
+    ble_phy_power_flags &= ~BLE_SET_1M_POWER;
     ret = hw_ble_send_power_level_cmd(1, ble_1m_power);
-  } else if (set_1m_2m_power & BLE_SET_2M_POWER) {
+  } else if (ble_phy_power_flags & BLE_SET_2M_POWER) {
     VND_LOGD("Setting BLE 2M TX power level at %d dbm", ble_2m_power);
-    set_1m_2m_power &= ~BLE_SET_2M_POWER;
+    ble_phy_power_flags &= ~BLE_SET_2M_POWER;
     ret = hw_ble_send_power_level_cmd(2, ble_2m_power);
-  }
+  } else if (ble_phy_power_flags & BLE_SET_CODED_PHY_POWER) {
+    VND_LOGD("Setting BLE CODED PHY power level at %d dbm", ble_coded_phy_power);
+    ble_phy_power_flags &= ~BLE_SET_CODED_PHY_POWER;
+    ret = hw_ble_send_power_level_cmd(3, ble_coded_phy_power);
+   }
   return ret;
 }
 /******************************************************************************
