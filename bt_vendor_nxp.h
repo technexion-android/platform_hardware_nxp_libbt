@@ -43,7 +43,7 @@
 
 /*================================== Macros ==================================*/
 
-#define BT_HAL_VERSION "009.032"
+#define BT_HAL_VERSION "009.033"
 
 #define TIMEOUT_SEC 6
 #define RW_SUCCESSFUL (1)

@@ -155,8 +155,8 @@ static hw_config_fun_ptr hw_config_seq_arr[] = {
     hw_bt_read_fw_revision,
     hw_bt_enable_independent_reset,
     hw_bt_cal_data_load,
-    hw_ble_set_power_level,
     hw_bt_enable_max_power_level_cmd,
+    hw_ble_set_power_level,
     hw_config_read_bdaddr, /*Note:hw_config_read_bdaddr shall precede
                               hw_config_set_bdaddr*/
     hw_config_set_bdaddr,
