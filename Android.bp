@@ -32,7 +32,7 @@ cc_defaults {
 }
 
 cc_library_shared {
-    name: "libbt-vendor",
+    name: "libbt-vendor-nxp",
     include_dirs: [
         "hardware/interfaces/bluetooth/1.0/default",
     ],
