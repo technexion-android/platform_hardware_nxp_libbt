@@ -63,6 +63,7 @@ bootstrap_go_package {
     pkgPath: "android/soong/hardware/nxp/libbt",
     deps: [
         "blueprint",
+        "blueprint-proptools",
         "blueprint-pathtools",
         "soong",
         "soong-android",
