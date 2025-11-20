@@ -1,5 +1,11 @@
 # Change Log
 All notable changes in Bluetooth Vendor Hardware Abstraction Layer(BT VHAL) will be documented in this file.
+## [009.034] - 2025-October-25
+
+### Added
+- Crash recovery support to VHAL for V3 FW_Loader to resume firmware download
+  after unexpected interruptions.
+
 ## [009.032] - 2025-June-21
 
 ### Added

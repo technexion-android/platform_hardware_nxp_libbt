@@ -103,6 +103,12 @@
 #define FCR 0x000000c7  // TODO: why same as ICR
 /* Timeout for getting 0xa5 or 0xab or 0xaa or 0xa7 */
 #define TIMEOUT_VAL_MILLISEC 510
+// Protocol MACROS used for recovery and command handling
+#define FW_DOWNLOAD_INIT_OFFSET 0x00
+#define CHANGE_BAUDRATE_FRAME_LEN 68 // CMD5 header (12) + payload (56)
+#define CMD7_TIMEOUT_HDR_LEN (sizeof(m_Buffer_CMD7_ChangeTimeoutValue))
+#define CHANGE_BAUD_HDR_OFFSET 0x10
+#define CHANGE_BAUD_PAYLOAD_OFFSET 0x20
 
 static unsigned char crc8_table[256]; /* 8-bit table */
 static int made_table = 0;
@@ -116,6 +122,7 @@ static uint32 cmd5_len = 0;
 static bool send_poke = true;
 static uint16 chip_id = 0;
 static uint8 m_Buffer_Poke[2] = {0xdc, 0xe9};
+static bool fw_recovery_triggered = false;
 // CMD5 Header to change bootloader baud rate
 static uint8 m_Buffer_CMD5_Header[16] = {0x05, 0x00, 0x00, 0x00, 0x00, 0x00,
                                          0x00, 0x00, 0x2c, 0x00, 0x00, 0x00,
@@ -1667,12 +1674,12 @@ static int32 fw_Change_Baudrate(int8* pPortName, uint32 iFirstBaudRate,
           if (uiNewError == 0) {
             fw_upload_Send_Ack(V3_REQUEST_ACK);
             bFirstWaitHeaderSignature = true;
-
-            if (uiNewLen == HDR_LEN) {
+            if ((uiNewLen == HDR_LEN) &&
+                (ulNewOffset == CHANGE_BAUD_HDR_OFFSET)) {
               VND_LOGV("Sending header");
               fw_upload_ComWriteChars(mchar_fd, m_Buffer_CMD5_Header, uiNewLen);
               ulLastOffsetToSend = ulNewOffset;
-            } else {
+            } else if (ulNewOffset == CHANGE_BAUD_PAYLOAD_OFFSET) {
               VND_LOGV("Sending payload");
               fw_upload_ComWriteChars(mchar_fd, uartConfig, uiNewLen);
               // Reopen Uart by using the second baudrate after downloading the
@@ -1680,9 +1687,11 @@ static int32 fw_Change_Baudrate(int8* pPortName, uint32 iFirstBaudRate,
               close(mchar_fd);
               mchar_fd = init_uart(pPortName, iSecondBaudRate, 1);
               ucLoadPayload = 1;
+            } else {
+              VND_LOGV("Unexpected offset received: 0x%x\n", ulNewOffset);
             }
 
-          } else  // NAK,TIMEOUT,INVALID COMMAND...
+          } else // NAK,TIMEOUT,INVALID COMMAND...
           {
             tcflush(mchar_fd, TCIFLUSH);
             fw_upload_Send_Ack(V3_TIMEOUT_ACK);
@@ -1740,7 +1749,8 @@ static int32 fw_Change_Timeout() {
           if (uiNewLen != 0) {
             if (uiNewError == 0) {
               VND_LOGV(" === Succ: REQ = 0xA7, Errcode = 0 ");
-              if (bFirst || ulLastOffsetToSend == ulNewOffset) {
+              if ((bFirst || ulLastOffsetToSend == ulNewOffset) &&
+                  ulNewOffset == FW_DOWNLOAD_INIT_OFFSET) {
                 fw_upload_Send_Ack(V3_REQUEST_ACK);
                 fw_upload_ComWriteChars(
                     mchar_fd, m_Buffer_CMD7_ChangeTimeoutValue, uiNewLen);
@@ -2049,23 +2059,41 @@ static uint32 fw_upload_FW(int8* pPortName, uint32 iBaudRate, int8* pFileName,
     return OPEN_FILE_FAIL;
   }
 
-  result = fw_Change_Timeout();
+  if (fw_recovery_triggered) {
+    VND_LOGV("[Recovery] Reopening UART with secondary baud rate: %d",
+             iSecondBaudRate);
+    close(mchar_fd);
+    mchar_fd = init_uart(pPortName, iSecondBaudRate, 1);
+    if (fw_upload_WaitForHeaderSignature(TIMEOUT_VAL_MILLISEC)) {
+      VND_LOGV("[Recovery] Signature received - resuming firmware download...");
+      change_baudrate_buffer_len = CHANGE_BAUDRATE_FRAME_LEN;
+      cmd7_change_timeout_len = CMD7_TIMEOUT_HDR_LEN;
+    } else {
+      VND_LOGE("[Recovery] No signature received within %dms - recovery failed",
+               TIMEOUT_VAL_MILLISEC);
+      close(mchar_fd);
+      return RECOVERY_FAILED;
+    }
+  } else {
+    result = fw_Change_Timeout();
+    if (result == -1) {
+      fclose(pFile);
+      return START_INDICATION_NOT_FOUND;
+    }
+    if (result == 0) {
+      cmd7_change_timeout_len = HDR_LEN;
+      bFirstWaitHeaderSignature = false;
+    }
 
-  if (result == -1) {
-    fclose(pFile);
-    return START_INDICATION_NOT_FOUND;
-  }
-
-  if (result == 0) {
-    cmd7_change_timeout_len = HDR_LEN;
-    bFirstWaitHeaderSignature = false;
-  }
-
-  if (iSecondBaudRate != 0) {
-    uint32 j = 0;
-    result = fw_Change_Baudrate(pPortName, iBaudRate, iSecondBaudRate,
-                                bFirstWaitHeaderSignature);
-    switch (result) {
+    if (iSecondBaudRate != 0) {
+      uint32 j = 0;
+      result = fw_Change_Baudrate(pPortName, iBaudRate, iSecondBaudRate,
+                                  bFirstWaitHeaderSignature);
+      switch (result) {
+      case 0:
+        VND_LOGD("Bootcode switched to new baudrate %d successfully (Ver3)",
+                 iSecondBaudRate);
+        break;
       case -1:
         VND_LOGV("Second baud rate %d is not support", iSecondBaudRate);
         VND_LOGV("Fw loader only supports the baud rate as");
@@ -2080,10 +2108,11 @@ static uint32 fw_upload_FW(int8* pPortName, uint32 iBaudRate, int8* pFileName,
       default:
         VND_LOGV("Error while changing baud rate");
         break;
-    }
-    if (result != 0) {
-      fclose(pFile);
-      return CHANGE_BAUDRATE_FAIL;
+      }
+      if (result != 0) {
+        fclose(pFile);
+        return CHANGE_BAUDRATE_FAIL;
+      }
     }
   }
 
@@ -2186,7 +2215,7 @@ static uint32 fw_upload_FW(int8* pPortName, uint32 iBaudRate, int8* pFileName,
             fw_upload_V3SendLenBytes(pFileBuffer, uiNewLen, ulNewOffset);
 
             VND_LOGV(" sent %d bytes..", uiNewLen);
-          } else  // NAK,TIMEOUT,INVALID COMMAND...
+          } else // NAK,TIMEOUT,INVALID COMMAND...
           {
             uint8 i;
             VND_LOGV(" === Fail: REQ = 0xA7, Errcode != 0 ");
@@ -2274,7 +2303,14 @@ bool bt_vnd_mrvl_check_fw_status(void) {
   }
 
   // Wait to Receive 0xa5, 0xaa, 0xab, 0xa7
-  bRetVal = fw_upload_WaitForHeaderSignature(1000);
+  bRetVal = fw_upload_WaitForHeaderSignature(2 * TIMEOUT_VAL_MILLISEC);
+  if (!bRetVal) {
+    VND_LOGW("[Recovery]: Header signature not received within %dms: "
+             "initiating firmware recovery",
+             2 * TIMEOUT_VAL_MILLISEC);
+    fw_recovery_triggered = true;
+    return true;
+  }
 
   VND_LOGD("fw_upload_WaitForHeaderSignature return %d", bRetVal);
 

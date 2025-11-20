@@ -43,7 +43,7 @@
 
 /*================================== Macros ==================================*/
 
-#define BT_HAL_VERSION "009.033"
+#define BT_HAL_VERSION "009.034"
 
 #define TIMEOUT_SEC 6
 #define RW_SUCCESSFUL (1)
@@ -62,6 +62,7 @@
 #define MALLOC_RETURNED_NULL 0xB
 #define START_INDICATION_NOT_FOUND 0xC
 #define INVALID_LEN_TO_SEND 0xD
+#define RECOVERY_FAILED 0xE
 
 #define BLE_SET_1M_POWER 0x01
 #define BLE_SET_2M_POWER 0x02

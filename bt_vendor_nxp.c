@@ -1457,6 +1457,8 @@ static int bt_vnd_send_inband_ir(uint32_t baudrate) {
       VND_LOGE("Error: %s (%d)", strerror(errno), errno);
       return -1;
     } else {
+      VND_LOGD("=========Resetting Inband IR CONFIG PROP=======");
+      set_prop_int32(PROP_BLUETOOTH_INBAND_CONFIGURED, 0);
       VND_LOGV("start read hci event");
       if (read_hci_event_status(HCI_CMD_INBAND_RESET, POLL_MAX_TIMEOUT_MS) !=
           0) {
@@ -1693,7 +1695,6 @@ static int bt_vnd_op(bt_vendor_opcode_t opcode, void* param) {
           if ((independent_reset_mode == IR_MODE_INBAND_VSC) &&
               (mchar_fd > 0)) {
             if (bt_vnd_send_inband_ir(baudrate) != 0) {
-              set_prop_int32(PROP_BLUETOOTH_INBAND_CONFIGURED, 0);
               if (enable_pdn_recovery == true) {
                 return bt_vnd_trigger_pdn();
               }
